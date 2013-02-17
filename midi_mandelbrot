@@ -7,6 +7,72 @@ use MIDI;
 use Math::Complex;
 use Getopt::Long;
 
+=head1 NAME
+
+   midi_mandelbrot
+
+=head1 SYNOPSIS
+
+   midi_mandelbrot [--mode <mode>]
+                   [--base_note <note>]
+                   [--octaves <num octaves>]
+                   [--outfile <output file>]
+                   [--min_length <note length in ticks>]
+                   [--flatten|--noflatten]
+                   [--channel <MIDI Channel>]
+                   [--dx <dx>]
+                   [--dy <dy>]
+                   
+                   
+=head1 DESCRIPTION
+
+=head2 OPTIONS
+
+=over 4
+
+=item mode
+
+The 'mode' that is mapped across the values.  The default is 'ionian'.
+
+=item octaves
+
+The number of octaves that the mapping will span.  The default is 2
+
+=item outfile
+
+The MIDI file to be written out.  The default is 'mandelbrot.mid'
+
+=item flatten
+
+If this is true then consecutive notes of the same value are merged into
+a single note of the same total length.  If not a note will be generated
+for every step of C<min_length> ticks.  User C<--noflatten> to not flatten.
+
+=item min_length
+
+The number of ticks of the shortest note.  The default is 6 which at the
+default 96 ticks per quarter note is a 1/64 note.
+
+=item base_note
+
+The root note on which to base the pattern.  In the format understood
+by the L<MIDI> module.  The default is 'E2'
+
+=item dx
+
+The increment used in the x plane.  The default is 0.0351
+
+=item dy
+
+The increment used in the y plane. The default is 0.05
+
+=item channel
+
+The MIDI channel (1-16) that the track is generated for.  Default is 1.
+
+=back
+
+=cut
 
 my $mode = 'ionian';
 my $octaves = 2;
@@ -29,7 +95,7 @@ GetOptions(
 			'outfile=s'		=>	\$outfile,
 			'flatten!'		=>	\$flatten,
 			'min_length=i'	=>	\$min_length,
-            'base_note=s'	=>	\$base_note,
+			'base_note=s'	=>	\$base_note,
 			'dx=f'			=>	\$dx,
 			'dy=f'			=>	\$dy,
 			'channel=i'		=>	\$channel
@@ -52,54 +118,6 @@ if (! exists $modes{$mode} )
 	die "Invalid mode - valid modes are : " . join(', ', keys %modes) . "\n";
 }
 
-sub modepos2triad
-{
-	my ( $mode, $root, $pos ) = @_;
-
-	my @notes;
-
-	if (my $mode_scale = $modes{$mode})
-	{
-		if ( $pos && $pos < 8)
-		{
-			
-		}
-	}
-
-
-	return @notes;
-}
-
-sub modepos
-{
-	my ( $mode, $root, $pos ) = @_;
-
-	
-	my $note;
-
-	if (my $mode_scale = $modes{$mode})
-	{
-		if ( $pos )
-		{
-			$note = $root;
-			if ( $pos > 1 )
-			{
-				if ($pos > $#{$mode_scale} )
-				{
-					push @{$mode_scale}, @{$mode_scale};
-				}
-				$pos = $pos - 2;
-
-				foreach my $off (@{$mode_scale}[0 .. $pos])
-				{
-					$note = $note + $off;
-				}
-			}
-		}
-	}
-
-	return $note;
-}
 			   
 my $test = MIDI::Track->new();
  
@@ -107,23 +125,9 @@ $test->new_event('set_tempo', 0, 450_000);
 
 my $base_num = $MIDI::note2number{$base_note};
 
-sub mandelbrot 
+if(!defined $base_num )
 {
-    my ($z, $c, $max_iter) = @_;
-
-    my $rc = 1;
-
-    for my $iter (1 .. $max_iter) 
-	{
-        $z = $z * $z + $c;
-        if ( abs $z > 2 )
-        {
-			$rc = $iter;
-			last;
-		}
-    }
-
-	return $rc;
+	die "Invalid base_note\n";
 }
  
 my $old_note;
@@ -175,3 +179,71 @@ my $opus = MIDI::Opus->new( { 'format' => 1,
                               'tracks' => [ $test ] 
 							} );
 $opus->write_to_file( $outfile);
+
+sub mandelbrot 
+{
+    my ($z, $c, $max_iter) = @_;
+
+    my $rc = 1;
+
+    for my $iter (1 .. $max_iter) 
+	{
+        $z = $z * $z + $c;
+        if ( abs $z > 2 )
+        {
+			$rc = $iter;
+			last;
+		}
+    }
+
+	return $rc;
+}
+
+sub modepos2triad
+{
+	my ( $mode, $root, $pos ) = @_;
+
+	my @notes;
+
+	if (my $mode_scale = $modes{$mode})
+	{
+		if ( $pos && $pos < 8)
+		{
+			
+		}
+	}
+
+
+	return @notes;
+}
+
+sub modepos
+{
+	my ( $mode, $root, $pos ) = @_;
+
+	
+	my $note;
+
+	if (my $mode_scale = $modes{$mode})
+	{
+		if ( $pos )
+		{
+			$note = $root;
+			if ( $pos > 1 )
+			{
+				if ($pos > $#{$mode_scale} )
+				{
+					push @{$mode_scale}, @{$mode_scale};
+				}
+				$pos = $pos - 2;
+
+				foreach my $off (@{$mode_scale}[0 .. $pos])
+				{
+					$note = $note + $off;
+				}
+			}
+		}
+	}
+
+	return $note;
+}
