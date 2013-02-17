@@ -14,6 +14,8 @@ my $outfile = 'mandelbrot.mid';
 
 my $flatten = 1;
 
+my $channel = 1;
+
 my $min_length = 6;
 
 my $dx = 0.0315;
@@ -22,14 +24,15 @@ my $dy = 0.05;
 my $base_note = 'E2';
 
 GetOptions(
-			'mode=s'	=>	\$mode,
-			'octaves=i'	=>	\$octaves,
-			'outfile=s'	=>	\$outfile,
-			'flatten!'	=>	\$flatten,
+			'mode=s'		=>	\$mode,
+			'octaves=i'		=>	\$octaves,
+			'outfile=s'		=>	\$outfile,
+			'flatten!'		=>	\$flatten,
 			'min_length=i'	=>	\$min_length,
             'base_note=s'	=>	\$base_note,
 			'dx=f'			=>	\$dx,
-			'dy=f'			=>	\$dy
+			'dy=f'			=>	\$dy,
+			'channel=i'		=>	\$channel
           );
 
 my %modes = (   
@@ -43,6 +46,11 @@ my %modes = (
 				major		=>	[2,2,1,2,2,2,1],
 			);
 			
+
+if (! exists $modes{$mode} )
+{
+	die "Invalid mode - valid modes are : " . join(', ', keys %modes) . "\n";
+}
 
 sub modepos2triad
 {
@@ -120,6 +128,8 @@ sub mandelbrot
  
 my $old_note;
 
+my $mc = $channel - 1;
+
 for (my $y = 1; $y >= -1; $y -= $dy) 
 {
 	my $note_length = $min_length;
@@ -136,8 +146,8 @@ for (my $y = 1; $y >= -1; $y -= $dy)
 			{
 				if ( $note != $old_note )
 				{
-        			$test->new_event('note_on' , 0,  1, $old_note, 127);
-        			$test->new_event('note_off', $note_length,1,$old_note,127);
+        			$test->new_event('note_on' , 0,  $mc, $old_note, 127);
+        			$test->new_event('note_off', $note_length,$mc,$old_note,127);
 					$old_note = $note;
 					$note_length = $min_length;
 				}
@@ -154,12 +164,14 @@ for (my $y = 1; $y >= -1; $y -= $dy)
 		}
 		else
 		{
-        	$test->new_event('note_on' , 0,  1, $note, 127);
-        	$test->new_event('note_off',  $min_length,  1, $note, 127);
+        	$test->new_event('note_on' , 0,  $mc, $note, 127);
+        	$test->new_event('note_off',  $min_length,  $mc, $note, 127);
 		}
     }
 }
 
-my $opus = MIDI::Opus->new(
-  { 'format' => 1, 'ticks' => 96, 'tracks' => [ $test ] } );
+my $opus = MIDI::Opus->new( { 'format' => 1, 
+                              'ticks' => 96, 
+                              'tracks' => [ $test ] 
+							} );
 $opus->write_to_file( $outfile);
