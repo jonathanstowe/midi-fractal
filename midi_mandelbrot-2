@@ -1,0 +1,262 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use MIDI;
+use Math::Complex;
+use Getopt::Long;
+
+=head1 NAME
+
+   midi_mandelbrot
+
+=head1 SYNOPSIS
+
+   midi_mandelbrot [--mode <mode>]
+                   [--base_note <note>]
+                   [--octaves <num octaves>]
+                   [--outfile <output file>]
+                   [--min_length <note length in ticks>]
+                   [--flatten|--noflatten]
+                   [--channel <MIDI Channel>]
+                   
+                   
+=head1 DESCRIPTION
+
+=head2 OPTIONS
+
+=over 4
+
+=item mode
+
+The 'mode' that is mapped across the values.  The default is 'ionian'.
+
+=item octaves
+
+The number of octaves that the mapping will span.  The default is 2
+
+=item outfile
+
+The MIDI file to be written out.  The default is 'mandelbrot.mid'
+
+=item flatten
+
+If this is true then consecutive notes of the same value are merged into
+a single note of the same total length.  If not a note will be generated
+for every step of C<min_length> ticks.  User C<--noflatten> to not flatten.
+
+=item min_length
+
+The number of ticks of the shortest note.  The default is 6 which at the
+default 96 ticks per quarter note is a 1/64 note.
+
+=item base_note
+
+The root note on which to base the pattern.  In the format understood
+by the L<MIDI> module.  The default is 'E2'
+
+=item dx
+
+The increment used in the x plane.  The default is 0.0351
+
+=item dy
+
+The increment used in the y plane. The default is 0.05
+
+=item channel
+
+The MIDI channel (1-16) that the track is generated for.  Default is 1.
+
+=back
+
+=cut
+
+my $mode = 'ionian';
+my $octaves = 2;
+my $outfile = 'mandelbrot.mid';
+
+my $flatten = 1;
+
+my $channel = 1;
+
+my $min_length = 6;
+
+my $bars = 16;
+
+
+my $base_note = 'E2';
+
+GetOptions(
+			'mode=s'		=>	\$mode,
+			'octaves=i'		=>	\$octaves,
+			'outfile=s'		=>	\$outfile,
+			'flatten!'		=>	\$flatten,
+			'min_length=i'	=>	\$min_length,
+			'base_note=s'	=>	\$base_note,
+			'channel=i'		=>	\$channel,
+            'bars=i'		=>	\$bars
+          );
+
+my %modes = (   
+				ionian		=>	[2,2,1,2,2,2,1],
+				dorian		=>	[2,1,2,2,2,1,2],
+				phrygian	=>	[1,2,2,2,1,2,2],
+				lydian		=>	[2,2,2,1,2,2,1],
+				mixolydian 	=> 	[2,2,1,2,2,1,2],
+				aeolian		=>	[2,1,2,2,1,2,2],
+				locrian		=>	[1,2,2,1,2,2,2],
+				major		=>	[2,2,1,2,2,2,1],
+			);
+			
+
+if (! exists $modes{$mode} )
+{
+	die "Invalid mode - valid modes are : " . join(', ', keys %modes) . "\n";
+}
+
+			   
+my $test = MIDI::Track->new();
+ 
+$test->new_event('set_tempo', 0, 450_000);
+
+my $base_num = $MIDI::note2number{$base_note};
+
+if(!defined $base_num )
+{
+	die "Invalid base_note\n";
+}
+ 
+my $old_note;
+
+my $mc = $channel - 1;
+
+my ( $max_iterations, $max_size ) = ( 512, 8 );
+
+my ( $XMax, $XMin, $YMax, $YMin ) = ( 1.2, -2.0, 1.2, -1.2 );
+
+my $ticks      = 96;
+
+my $maxcol      = ( $ticks * 4 ) / $min_length;
+my $maxrow      = $bars;
+
+my $max_colours = $octaves * 8;
+
+my $deltaP = ( $XMax - $XMin ) / $maxcol;
+my $deltaQ = ( $YMax - $YMin ) / $maxrow;
+
+my @Q = ($YMax);
+
+for ( 1 .. $maxrow )
+{
+   $Q[$_] = $Q[ $_ - 1 ] - $deltaQ;
+}
+
+my $P = $XMin;
+
+for my $col ( 0 .. $maxcol - 1 )
+{
+   my $note_length = $min_length;
+   for my $row ( 0 .. $maxrow - 1 )
+   {
+      my ( $X, $Y, $XSquare, $YSquare ) = ( 0, 0, 0, 0 );
+
+      my $colour = 1;
+
+      while (($colour < $max_iterations) && (($XSquare + $YSquare) < $max_size))
+      {
+         $XSquare = $X * $X;
+         $YSquare = $Y * $Y;
+
+         $Y *= $X;
+         $Y += $Y + $Q[$row];
+         $X = $XSquare - $YSquare + $P;
+         $colour++;
+      }
+      my $pos = ( $colour % $max_colours) + 1;
+      my $note =  modepos($mode, $base_num,$pos);
+		if ( $flatten )
+        {
+			if ( defined $old_note)
+			{
+				if ( $note != $old_note )
+				{
+        			$test->new_event('note_on' , 0,  $mc, $old_note, 127);
+        			$test->new_event('note_off', $note_length,$mc,$old_note,127);
+					$old_note = $note;
+					$note_length = $min_length;
+				}
+				else
+				{
+					$note_length += $min_length;
+				}
+			}
+			else
+			{
+				$old_note = $note;
+				$note_length = $min_length;
+			}
+		}
+		else
+		{
+        	$test->new_event('note_on' , 0,  $mc, $note, 127);
+        	$test->new_event('note_off',  $min_length,  $mc, $note, 127);
+		}
+   }
+   $P += $deltaP;
+}
+
+my $opus = MIDI::Opus->new( { 'format' => 1, 
+                              'ticks' => $ticks, 
+                              'tracks' => [ $test ] 
+							} );
+$opus->write_to_file( $outfile);
+
+sub modepos2triad
+{
+	my ( $mode, $root, $pos ) = @_;
+
+	my @notes;
+
+	if (my $mode_scale = $modes{$mode})
+	{
+		if ( $pos && $pos < 8)
+		{
+			
+		}
+	}
+
+
+	return @notes;
+}
+
+sub modepos
+{
+	my ( $mode, $root, $pos ) = @_;
+
+	
+	my $note;
+
+	if (my $mode_scale = $modes{$mode})
+	{
+		if ( $pos )
+		{
+			$note = $root;
+			if ( $pos > 1 )
+			{
+				if ($pos > $#{$mode_scale} )
+				{
+					push @{$mode_scale}, @{$mode_scale};
+				}
+				$pos = $pos - 2;
+
+				foreach my $off (@{$mode_scale}[0 .. $pos])
+				{
+					$note = $note + $off;
+				}
+			}
+		}
+	}
+
+	return $note;
+}
