@@ -87,6 +87,9 @@ my $bars = 16;
 
 my $base_note = 'E2';
 
+my ( $max_iterations, $max_size ) = ( 512, 8 );
+my ( $XMax, $XMin, $YMax, $YMin ) = ( 1.2, -2.0, 1.2, -1.2 );
+
 GetOptions(
 			'mode=s'		=>	\$mode,
 			'octaves=i'		=>	\$octaves,
@@ -95,7 +98,13 @@ GetOptions(
 			'min_length=i'	=>	\$min_length,
 			'base_note=s'	=>	\$base_note,
 			'channel=i'		=>	\$channel,
-            'bars=i'		=>	\$bars
+            'bars=i'		=>	\$bars,
+            'max_iterations=i'  => \$max_iterations,
+            'max_size=i'   => \$max_size,
+            'xmax=f'       => \$XMax,
+            'xmin=f'       => \$XMin,
+            'ymax=f'       => \$YMax,
+            'ymin=f'       => \$YMin,
           );
 
 my %modes = (   
@@ -131,9 +140,6 @@ my $old_note;
 
 my $mc = $channel - 1;
 
-my ( $max_iterations, $max_size ) = ( 512, 8 );
-
-my ( $XMax, $XMin, $YMax, $YMin ) = ( 1.2, -2.0, 1.2, -1.2 );
 
 my $ticks      = 96;
 
